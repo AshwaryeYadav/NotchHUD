@@ -1,0 +1,35 @@
+# Swift Package Manager
+.build/
+.swiftpm/
+*.xcodeproj
+*.xcworkspace
+DerivedData/
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# Xcode
+*.hmap
+*.ipa
+*.dSYM.zip
+*.dSYM
+
+# Swift
+*.swiftmodule
+*.swiftdoc
+*.swiftc
+
+# Build artifacts
+*.o
+*.a
+*.dylib
+
+# Temporary files
+*.swp
+*~.nib
+*.tmp
+
+# Logs
+*.log
