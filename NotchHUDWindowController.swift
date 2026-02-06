@@ -54,6 +54,7 @@ final class NotchHUDWindowController: NSWindowController {
         panel.contentView = hostingView
         
         // Size for expanded state
+
         panel.setFrame(NSRect(origin: .zero, size: NSSize(width: 400, height: 200)), display: false)
 
         self.init(window: panel)

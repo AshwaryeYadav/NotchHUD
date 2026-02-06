@@ -12,7 +12,7 @@ struct NotchHUDView: View {
         }
         return expanded ? 400 : 250
     }
-    private var pillHeight: CGFloat { expanded ? 175 : 34 }
+    private var pillHeight: CGFloat { expanded ? 200 : 34 }
     
     var body: some View {
         VStack {
@@ -46,7 +46,6 @@ struct NotchHUDView: View {
                     style: .continuous
                 )
             )
-            .shadow(color: .black.opacity(0.4), radius: 12, y: 6)
             .contentShape(
                 UnevenRoundedRectangle(
                     topLeadingRadius: 0,
@@ -110,7 +109,7 @@ struct NotchHUDView: View {
     // MARK: - Expanded View
     
     private var expandedContent: some View {
-        VStack(spacing: 14) {
+        VStack(spacing: 16) {
             // Top section: Artwork + Info + Visualizer
             HStack(spacing: 14) {
                 // Album artwork
@@ -134,20 +133,18 @@ struct NotchHUDView: View {
                 // Track info
                 VStack(alignment: .leading, spacing: 4) {
                     Text(nowPlaying.info.hasContent ? nowPlaying.info.title : "Nothing Playing")
-                        .font(.system(size: 15, weight: .bold, design: .default))
+                        .font(.system(size: 15, weight: .semibold)) // Apple-style semibold
                         .foregroundStyle(.white)
                         .lineLimit(1)
-                        .tracking(-0.2)
                     
                     if nowPlaying.info.hasContent {
                         Text(nowPlaying.info.artist)
-                            .font(.system(size: 13, weight: .regular, design: .default))
+                            .font(.system(size: 13, weight: .medium)) // Slightly reduced weight, no tracking adjustments
                             .foregroundStyle(.white.opacity(0.6))
                             .lineLimit(1)
-                            .tracking(-0.1)
                     }
                 }
-                .padding(.top, 4)
+                .padding(.top, 12)
                 
                 Spacer(minLength: 0)
                 
@@ -161,8 +158,8 @@ struct NotchHUDView: View {
                     .frame(width: 22, height: 18)
                 }
             }
-            .padding(.horizontal, 16)
-            .padding(.top, 16)
+            .padding(.horizontal, 20)
+            .padding(.top, 20)
             
             // Progress section
             if nowPlaying.info.hasContent {
@@ -190,7 +187,7 @@ struct NotchHUDView: View {
                         .foregroundStyle(.white.opacity(0.5))
                         .frame(width: 40, alignment: .trailing)
                 }
-                .padding(.horizontal, 16)
+                .padding(.horizontal, 20)
             }
             
             // Controls section
@@ -230,7 +227,7 @@ struct NotchHUDView: View {
                     }
                 }
                 .padding(.horizontal, 20)
-                .padding(.bottom, 16)
+                .padding(.bottom, 20)
             }
         }
     }
@@ -391,7 +388,7 @@ struct AnimatedBar: View {
     var body: some View {
         Capsule()
             .fill(color)
-            .frame(width: 3)
+            .frame(width: 2) // Sleeker bars
             .scaleEffect(y: scale, anchor: .bottom)
             .opacity(0.9)
             .onAppear {
