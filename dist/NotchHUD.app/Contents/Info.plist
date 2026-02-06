@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>CFBundleName</key>
+  <string>NotchHUD</string>
+  <key>CFBundleDisplayName</key>
+  <string>NotchHUD</string>
+  <key>CFBundleIdentifier</key>
+  <string>com.ashwaryeyadav.notchhud</string>
+  <key>CFBundleVersion</key>
+  <string>1</string>
+  <key>CFBundleShortVersionString</key>
+  <string>1.0</string>
+  <key>CFBundlePackageType</key>
+  <string>APPL</string>
+  <key>CFBundleExecutable</key>
+  <string>NotchHUD</string>
+
+  <!-- Menu-bar only (no Dock icon) -->
+  <key>LSUIElement</key>
+  <true/>
+
+  <!-- Shown in the Automation consent prompt -->
+  <key>NSAppleEventsUsageDescription</key>
+  <string>NotchHUD needs permission to control apps like Safari, Spotify, and Music to fetch now playing info and integrate with your workflow.</string>
+</dict>
+</plist>

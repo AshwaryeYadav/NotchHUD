@@ -43,6 +43,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let showItem = NSMenuItem(title: "Show HUD", action: #selector(showHUD), keyEquivalent: "s")
         showItem.target = self
         menu.addItem(showItem)
+
+        let safariPerms = NSMenuItem(title: "Enable Safari Permission…", action: #selector(requestSafariPermissions), keyEquivalent: "")
+        safariPerms.target = self
+        menu.addItem(safariPerms)
         
         menu.addItem(NSMenuItem.separator())
         
@@ -59,6 +63,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     
     @objc private func quitApp() {
         NSApp.terminate(nil)
+    }
+
+    @objc private func requestSafariPermissions() {
+        SafariPermissionManager.requestAutomationPermission()
     }
 }
 

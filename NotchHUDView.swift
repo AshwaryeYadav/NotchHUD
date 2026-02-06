@@ -192,6 +192,7 @@ struct NotchHUDView: View {
             
             // Controls section
             if nowPlaying.info.hasContent {
+                let isSafari = nowPlaying.info.source == "Safari"
                 HStack(spacing: 0) {
                     // Favorite button
                     controlButton(
@@ -206,16 +207,20 @@ struct NotchHUDView: View {
                     
                     // Playback controls
                     HStack(spacing: 20) {
-                        controlButton(icon: "backward.fill", size: 20) {
-                            nowPlaying.previousTrack()
+                        if !isSafari {
+                            controlButton(icon: "backward.fill", size: 20) {
+                                nowPlaying.previousTrack()
+                            }
                         }
                         
                         controlButton(icon: nowPlaying.info.isPlaying ? "pause.fill" : "play.fill", size: 28) {
                             nowPlaying.togglePlayPause()
                         }
                         
-                        controlButton(icon: "forward.fill", size: 20) {
-                            nowPlaying.nextTrack()
+                        if !isSafari {
+                            controlButton(icon: "forward.fill", size: 20) {
+                                nowPlaying.nextTrack()
+                            }
                         }
                     }
                     

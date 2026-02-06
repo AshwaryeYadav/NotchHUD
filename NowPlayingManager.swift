@@ -12,6 +12,7 @@ struct NowPlayingInfo: Equatable {
     var artworkData: Data? = nil
     var source: String = "" // "Music" or "Spotify"
     var isFavorited: Bool = false
+    var url: String = ""
     
     var progress: Double {
         guard duration > 0 else { return 0 }
@@ -83,13 +84,14 @@ final class NowPlayingManager: ObservableObject {
             func update(with newInfo: NowPlayingInfo?, artwork: NSImage?) async {
                 await MainActor.run {
                     if let newInfo = newInfo {
-                        self?.info = newInfo
                         self?.isAvailable = true
                         self?.lastUpdateTime = .now
+                        let previousTitle = self?.info.title
+                        self?.info = newInfo
                         if let img = artwork {
                             self?.artwork = img
-                        } else if newInfo.title != self?.info.title {
-                             self?.artwork = nil // Reset if track changed and no new artwork
+                        } else if previousTitle != newInfo.title {
+                            self?.artwork = nil // Reset if track changed and no new artwork
                         }
                     } else {
                         self?.info = NowPlayingInfo()
@@ -106,7 +108,8 @@ final class NowPlayingManager: ObservableObject {
                  let artworkImage = self?.getAppleMusicArtwork()
                  await update(with: musicInfo, artwork: artworkImage)
             } else if let safariInfo = self?.getSafariInfo() {
-                 await update(with: safariInfo, artwork: nil) // Safari artwork is hard via AppleScript
+                 let art = self?.getSafariArtwork(for: safariInfo.url)
+                 await update(with: safariInfo, artwork: art)
             } else {
                 await update(with: nil, artwork: nil)
             }
@@ -114,48 +117,47 @@ final class NowPlayingManager: ObservableObject {
     }
     
     private nonisolated func getSafariInfo() -> NowPlayingInfo? {
-        // Basic Safari web media support via JavaScript
-        // Checks for any video element that is not paused and has a duration > 1 sec
+        // Safari web video support (YouTube/Netflix/any <video>)
+        // We read title + playback state + currentTime/duration + URL from the ACTIVE tab.
+        // (Scanning all tabs is expensive and makes Safari feel laggy.)
+        let js = """
+        (() => {
+          const v = document.querySelector('video');
+          if (!v) return 'NOVIDEO';
+          const paused = v.paused;
+          const ct = v.currentTime || 0;
+          const dur = v.duration || 0;
+          const state = paused ? 'paused' : 'playing';
+          const ogTitle = document.querySelector('meta[property=\"og:title\"]')?.content?.trim();
+          const title = (ogTitle || document.title || '').trim();
+          const author = (document.querySelector('meta[name=\"author\"]')?.content?.trim() || location.hostname);
+          return [title, author, ct, dur, state, location.href].join('|||');
+        })();
+        """
+        
         let script = """
+        tell application "System Events"
+            if not (exists process "Safari") then return "NOT_RUNNING"
+        end tell
         tell application "Safari"
-            if (count of windows) is 0 then return "NOT_RUNNING"
-            repeat with w in windows
-                repeat with t in tabs of w
-                    try
-                         -- Check for title first to avoid checking every single tab's JS if not needed
-                         -- But we need to check JS to know if playing.
-                         -- Let's just run the JS. It's fast enough.
-                         
-                         set js to "
-                            (function() {
-                                var vids = document.getElementsByTagName('video');
-                                for(var i=0; i < vids.length; i++){ 
-                                    if(!vids[i].paused && vids[i].duration > 1) {
-                                        return 'PLAYING';
-                                    }
-                                }
-                                return 'NOT_PLAYING';
-                            })()
-                         "
-                         
-                         if (do JavaScript js in t) is "PLAYING" then
-                             return (name of t) & "|||" & "Safari" & "|||" & "PLAYING"
-                         end if
-                    on error
-                        -- ignore
-                    end try
-                end repeat
-            end repeat
-            return "NOT_FOUND"
+            if not (exists front document) then return "NO_DOC"
+            try
+                set r to do JavaScript "\(escapeForAppleScript(js))" in front document
+                return r
+            on error
+                return "JS_ERROR"
+            end try
         end tell
         """
         
         guard let result = runAppleScript(script),
               result != "NOT_RUNNING",
-              result != "NOT_FOUND" else { return nil }
+              result != "NO_DOC",
+              result != "JS_ERROR",
+              result != "NOVIDEO" else { return nil }
               
         let parts = result.components(separatedBy: "|||")
-        guard parts.count >= 3 else { return nil }
+        guard parts.count >= 6 else { return nil }
         
         // Clean title
         var title = parts[0]
@@ -164,15 +166,48 @@ final class NowPlayingManager: ObservableObject {
         title = title.replacingOccurrences(of: " - Netflix", with: "")
         title = title.replacingOccurrences(of: " | TED", with: "")
         
+        let author = parts[1]
+        let elapsed = Double(parts[2]) ?? 0
+        let duration = Double(parts[3]) ?? 0
+        let isPlaying = parts[4].lowercased().contains("playing")
+        let url = parts[5]
+        
         return NowPlayingInfo(
-            title: title,
-            artist: "Safari",
+            title: title.isEmpty ? "Safari Video" : title,
+            artist: author.isEmpty ? "Safari" : author,
             album: "",
-            isPlaying: true,
-            duration: 0,
-            elapsed: 0,
-            source: "Safari"
+            isPlaying: isPlaying,
+            duration: duration,
+            elapsed: elapsed,
+            artworkData: nil,
+            source: "Safari",
+            isFavorited: false,
+            url: url
         )
+    }
+
+    private nonisolated func getSafariArtwork(for urlString: String) -> NSImage? {
+        // YouTube: fetch thumbnail via public URL
+        guard let vid = youtubeVideoID(from: urlString) else { return nil }
+        guard let thumbURL = URL(string: "https://i.ytimg.com/vi/\(vid)/hqdefault.jpg") else { return nil }
+        guard let data = try? Data(contentsOf: thumbURL) else { return nil }
+        return NSImage(data: data)
+    }
+    
+    private nonisolated func youtubeVideoID(from urlString: String) -> String? {
+        guard let url = URL(string: urlString) else { return nil }
+        if url.host?.contains("youtu.be") == true {
+            return url.pathComponents.last
+        }
+        let comps = URLComponents(url: url, resolvingAgainstBaseURL: false)
+        return comps?.queryItems?.first(where: { $0.name == "v" })?.value
+    }
+    
+    private nonisolated func escapeForAppleScript(_ s: String) -> String {
+        s
+            .replacingOccurrences(of: "\\", with: "\\\\")
+            .replacingOccurrences(of: "\"", with: "\\\"")
+            .replacingOccurrences(of: "\n", with: "\\n")
     }
     
     private nonisolated func getSpotifyInfo() -> NowPlayingInfo? {
@@ -315,7 +350,9 @@ final class NowPlayingManager: ObservableObject {
         } else if info.source == "Safari" {
              let script = """
              tell application "Safari"
-                do JavaScript "document.querySelector('video').click()" in document 1
+                try
+                    do JavaScript "(() => { const v=document.querySelector('video'); if(!v) return ''; if(v.paused) v.play(); else v.pause(); return ''; })()" in front document
+                end try
              end tell
              """
              Task.detached { [weak self] in _ = self?.runAppleScript(script); await self?.forceRefresh() }
