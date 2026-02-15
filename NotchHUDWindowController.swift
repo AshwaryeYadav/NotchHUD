@@ -21,6 +21,8 @@ final class NotchHUDWindowController: NSWindowController {
     private var hideTimer: Timer?
     private var mouseMonitor: Any?
     private var globalMouseMonitor: Any?
+    
+    var isEnabled: Bool = true
 
     convenience init() {
         let panel = NSPanel(
@@ -51,6 +53,7 @@ final class NotchHUDWindowController: NSWindowController {
         let rootView = NotchHUDView()
         let hostingView = NSHostingView(rootView: rootView)
         hostingView.wantsLayer = true
+        hostingView.autoresizingMask = [.width, .height]
         panel.contentView = hostingView
         
         // Size for expanded state
@@ -60,22 +63,39 @@ final class NotchHUDWindowController: NSWindowController {
         self.init(window: panel)
         
         positionAtNotch()
-        setupMouseTracking()
+        positionAtNotch()
         
-        // Start with a fade-in
+        // Start hidden
         window?.alphaValue = 0
-        fadeIn()
-        
-        // Start idle timer
-        resetHideTimer()
     }
     
     deinit {
-        if let monitor = mouseMonitor {
-            NSEvent.removeMonitor(monitor)
-        }
-        if let monitor = globalMouseMonitor {
-            NSEvent.removeMonitor(monitor)
+        removeMouseTracking()
+    }
+    
+    // MARK: - Toggle HUD
+    
+    func setHUDEnabled(_ enable: Bool) {
+        isEnabled = enable
+        
+        if enable {
+            window?.setIsVisible(true)
+            setupMouseTracking()
+            fadeIn()
+            resetHideTimer()
+        } else {
+            removeMouseTracking()
+            hideTimer?.invalidate()
+            NSAnimationContext.runAnimationGroup { context in
+                context.duration = 0.4
+                window?.animator().alphaValue = 0
+            } completionHandler: { [weak self] in
+                if self?.isEnabled == false {
+                    self?.window?.setIsVisible(false)
+                }
+            }
+            isExpanded = false
+            window?.ignoresMouseEvents = true
         }
     }
     
@@ -110,6 +130,8 @@ final class NotchHUDWindowController: NSWindowController {
     // MARK: - Mouse Tracking
     
     private func setupMouseTracking() {
+        guard mouseMonitor == nil else { return }
+        
         mouseMonitor = NSEvent.addLocalMonitorForEvents(matching: [.mouseMoved]) { [weak self] event in
             self?.checkMousePosition()
             return event
@@ -120,8 +142,19 @@ final class NotchHUDWindowController: NSWindowController {
         }
     }
     
+    private func removeMouseTracking() {
+        if let monitor = mouseMonitor {
+            NSEvent.removeMonitor(monitor)
+            mouseMonitor = nil
+        }
+        if let monitor = globalMouseMonitor {
+            NSEvent.removeMonitor(monitor)
+            globalMouseMonitor = nil
+        }
+    }
+    
     private func checkMousePosition() {
-        guard let window = window else { return }
+        guard isEnabled, let window = window else { return }
         
         let mouseLocation = NSEvent.mouseLocation
         let windowFrame = window.frame

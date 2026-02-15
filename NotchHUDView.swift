@@ -165,7 +165,7 @@ struct NotchHUDView: View {
             if nowPlaying.info.hasContent {
                 HStack(spacing: 8) {
                     Text(nowPlaying.info.elapsedFormatted)
-                        .font(.system(size: 10, weight: .medium, design: .monospaced))
+                        .font(.system(size: 11, weight: .medium, design: .default))
                         .foregroundStyle(.white.opacity(0.5))
                         .frame(width: 36, alignment: .leading)
                     
@@ -183,7 +183,7 @@ struct NotchHUDView: View {
                     .frame(height: 4)
                     
                     Text(nowPlaying.info.remainingFormatted)
-                        .font(.system(size: 10, weight: .medium, design: .monospaced))
+                        .font(.system(size: 11, weight: .medium, design: .default))
                         .foregroundStyle(.white.opacity(0.5))
                         .frame(width: 40, alignment: .trailing)
                 }
@@ -225,6 +225,12 @@ struct NotchHUDView: View {
                     }
                     
                     Spacer()
+                    
+                    // Lyrics button
+                    controlButton(icon: "quote.bubble", size: 18) {
+                         LyricsWindowController.show(nowPlaying: nowPlaying)
+                    }
+                    .padding(.trailing, 20)
                     
                     // AirPlay button - opens Sound settings
                     controlButton(icon: "airplayaudio", size: 18) {

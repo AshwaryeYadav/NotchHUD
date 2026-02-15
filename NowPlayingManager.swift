@@ -39,11 +39,18 @@ struct NowPlayingInfo: Equatable {
     }
 }
 
+struct SyncedLyric: Identifiable, Equatable {
+    let id = UUID()
+    let text: String
+    let time: TimeInterval
+}
+
 @MainActor
 final class NowPlayingManager: ObservableObject {
     @Published var info = NowPlayingInfo()
     @Published var isAvailable = false
     @Published var artwork: NSImage? = nil
+    @Published var lyrics: [SyncedLyric] = []
     
     private var timer: Timer?
     private var elapsedTimer: Timer?
@@ -86,17 +93,30 @@ final class NowPlayingManager: ObservableObject {
                     if let newInfo = newInfo {
                         self?.isAvailable = true
                         self?.lastUpdateTime = .now
+                        
                         let previousTitle = self?.info.title
+                        let previousArtist = self?.info.artist
+                        
                         self?.info = newInfo
+                        
+                        // Check if track changed
+                        if previousTitle != newInfo.title || previousArtist != newInfo.artist {
+                            self?.lyrics = [] // Clear old lyrics
+                            self?.fetchLyrics(for: newInfo)
+                            
+                            if artwork == nil {
+                                self?.artwork = nil
+                            }
+                        }
+                        
                         if let img = artwork {
                             self?.artwork = img
-                        } else if previousTitle != newInfo.title {
-                            self?.artwork = nil // Reset if track changed and no new artwork
                         }
                     } else {
                         self?.info = NowPlayingInfo()
                         self?.isAvailable = false
                         self?.artwork = nil
+                        self?.lyrics = []
                     }
                 }
             }
@@ -114,6 +134,124 @@ final class NowPlayingManager: ObservableObject {
                 await update(with: nil, artwork: nil)
             }
         }
+    }
+
+    private func fetchLyrics(for info: NowPlayingInfo) {
+        let title = info.title
+        let artist = info.artist
+        let duration = info.duration
+        
+        print("Fetching lyrics for \(title) by \(artist)")
+        
+        guard !title.isEmpty, title != "Safari Video" else { return }
+        
+        Task.detached { [weak self] in
+            guard let self = self else { return }
+            
+            // Try specific get first
+            var fetchedLyrics = await self.getLyrics(title: title, artist: artist, duration: duration)
+            
+            if fetchedLyrics.isEmpty {
+                print("Direct get failed, trying search...")
+                fetchedLyrics = await self.searchLyrics(title: title, artist: artist, duration: duration)
+            }
+            
+            let finalLyrics = fetchedLyrics
+            await MainActor.run {
+                print("Found \(finalLyrics.count) lyric lines")
+                self.lyrics = finalLyrics
+            }
+        }
+    }
+    
+    // MARK: - Lyrics Helpers
+    
+    private nonisolated func getLyrics(title: String, artist: String, duration: Double) async -> [SyncedLyric] {
+        let urlString = "https://lrclib.net/api/get?artist_name=\(artist.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? "")&track_name=\(title.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? "")&duration=\(Int(duration))"
+        
+        guard let url = URL(string: urlString) else { return [] }
+        
+        do {
+            let data = try await performRequest(url: url)
+            if let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+               let syncedLyrics = json["syncedLyrics"] as? String {
+                return parseLrcPayload(syncedLyrics)
+            }
+        } catch {
+            print("Get lyrics error: \(error)")
+        }
+        return []
+    }
+    
+    private nonisolated func searchLyrics(title: String, artist: String, duration: Double) async -> [SyncedLyric] {
+        let query = "\(title) \(artist)"
+        let urlString = "https://lrclib.net/api/search?q=\(query.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? "")"
+        
+        guard let url = URL(string: urlString) else { return [] }
+        
+        do {
+            let data = try await performRequest(url: url)
+            if let results = try? JSONSerialization.jsonObject(with: data) as? [[String: Any]] {
+                // Find best match by duration
+                let bestMatch = results.min(by: { a, b in
+                    let durA = a["duration"] as? Double ?? 0
+                    let durB = b["duration"] as? Double ?? 0
+                    return abs(durA - duration) < abs(durB - duration)
+                })
+                
+                if let match = bestMatch,
+                   let syncedLyrics = match["syncedLyrics"] as? String {
+                   // Verify it's somewhat close in duration (within 10s)
+                   let matchDur = match["duration"] as? Double ?? 0
+                   if abs(matchDur - duration) < 10 {
+                       return parseLrcPayload(syncedLyrics)
+                   }
+                }
+            }
+        } catch {
+            print("Search lyrics error: \(error)")
+        }
+        return []
+    }
+    
+    private nonisolated func performRequest(url: URL) async throws -> Data {
+        var request = URLRequest(url: url)
+        request.timeoutInterval = 10
+        request.httpMethod = "GET"
+        request.addValue("NotchHUD/1.0", forHTTPHeaderField: "User-Agent")
+        
+        let (data, response) = try await URLSession.shared.data(for: request)
+        
+        if let httpResponse = response as? HTTPURLResponse {
+            guard (200...299).contains(httpResponse.statusCode) else {
+                throw NSError(domain: "HTTPError", code: httpResponse.statusCode, userInfo: nil)
+            }
+        }
+        return data
+    }
+    
+    private nonisolated func parseLrcPayload(_ lrc: String) -> [SyncedLyric] {
+        var result: [SyncedLyric] = []
+        let pattern = "\\[(\\d{2}):(\\d{2}\\.\\d{2})\\](.*)"
+        let regex = try? NSRegularExpression(pattern: pattern)
+        
+        lrc.enumerateLines { line, _ in
+            let nsString = line as NSString
+            if let match = regex?.firstMatch(in: line, range: NSRange(location: 0, length: line.utf16.count)) {
+                let minStr = nsString.substring(with: match.range(at: 1))
+                let secStr = nsString.substring(with: match.range(at: 2))
+                let text = nsString.substring(with: match.range(at: 3)).trimmingCharacters(in: .whitespaces)
+                
+                if let min = Double(minStr), let sec = Double(secStr) {
+                    // Slight offset for sync
+                    let time = (min * 60 + sec) - 0.2
+                    if !text.isEmpty {
+                        result.append(SyncedLyric(text: text, time: time))
+                    }
+                }
+            }
+        }
+        return result.sorted { $0.time < $1.time }
     }
     
     private nonisolated func getSafariInfo() -> NowPlayingInfo? {
@@ -296,17 +434,6 @@ final class NowPlayingManager: ObservableObject {
     }
     
     private nonisolated func getAppleMusicArtwork() -> NSImage? {
-        let script = """
-        tell application "Music"
-            try
-            set artData to raw data of artwork 1 of current track
-            return artData
-            on error
-            return ""
-            end try
-        end tell
-        """
-        
         // For Apple Music, we'll use a different approach - get via temp file
         let tempScript = """
         tell application "Music"

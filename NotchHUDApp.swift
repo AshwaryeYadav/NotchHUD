@@ -19,7 +19,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationDidFinishLaunching(_ notification: Notification) {
         // Create the HUD
         hud = NotchHUDWindowController()
-        hud?.showWindow(nil)
+        hud?.setHUDEnabled(isHUDEnabled)
         
         // Create menu bar icon
         setupMenuBarIcon()
@@ -40,9 +40,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         menu.addItem(NSMenuItem(title: "NotchHUD", action: nil, keyEquivalent: ""))
         menu.addItem(NSMenuItem.separator())
         
-        let showItem = NSMenuItem(title: "Show HUD", action: #selector(showHUD), keyEquivalent: "s")
-        showItem.target = self
-        menu.addItem(showItem)
+        let toggleItem = NSMenuItem(title: "Enable HUD", action: #selector(toggleHUD(_:)), keyEquivalent: "s")
+        toggleItem.target = self
+        toggleItem.state = isHUDEnabled ? .on : .off
+        menu.addItem(toggleItem)
 
         let safariPerms = NSMenuItem(title: "Enable Safari Permission…", action: #selector(requestSafariPermissions), keyEquivalent: "")
         safariPerms.target = self
@@ -57,8 +58,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         statusItem?.menu = menu
     }
     
-    @objc private func showHUD() {
-        hud?.window?.alphaValue = 1.0
+    @objc private func toggleHUD(_ sender: NSMenuItem) {
+        isHUDEnabled.toggle()
+        sender.state = isHUDEnabled ? .on : .off
+        hud?.setHUDEnabled(isHUDEnabled)
+    }
+    
+    private var isHUDEnabled: Bool {
+        get { UserDefaults.standard.object(forKey: "isHUDEnabled") as? Bool ?? true }
+        set { UserDefaults.standard.set(newValue, forKey: "isHUDEnabled") }
     }
     
     @objc private func quitApp() {

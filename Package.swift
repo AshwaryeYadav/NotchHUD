@@ -15,7 +15,9 @@ let package = Package(
                 "NotchHUDWindowController.swift",
                 "NotchHUDView.swift",
                 "NowPlayingManager.swift",
-                "SafariPermissionManager.swift"
+                "SafariPermissionManager.swift",
+                "LyricsView.swift",
+                "LyricsWindowController.swift"
             ]
         )
     ]
